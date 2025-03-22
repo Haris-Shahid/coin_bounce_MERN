@@ -3,42 +3,40 @@ const UserDTO = require("../dto/user");
 const JWTService = require("../services/JWTService");
 
 const auth = async (req, res, next) => {
-
     try {
-        // refresh access token validation
         const { refreshToken, accessToken } = req.cookies;
 
         if (!refreshToken || !accessToken) {
-            const error = {
-                status: 401,
-                message: "Unauthorized"
-            }
-            return next(error);
+            return res.status(401).json({ message: "Unauthorized: No tokens provided" });
         }
 
         let _id;
-
         try {
-            _id = JWTService.verifyAccessToken(accessToken);
+            const decoded = JWTService.verifyAccessToken(accessToken);
+            _id = decoded._id; // Ensure we're only getting the _id
         } catch (error) {
-            return next(error);
+            if (error.name === "TokenExpiredError") {
+                return res.status(401).json({ message: "jwt expired" }); // Return 401 instead of next(error)
+            }
+            return res.status(401).json({ message: "Invalid token" });
         }
 
         let user;
         try {
-            user = await User.findOne({ _id: _id });
+            user = await User.findOne({ _id });
+            if (!user) {
+                return res.status(401).json({ message: "Unauthorized: User not found" });
+            }
         } catch (error) {
-            return next(error);
+            return res.status(500).json({ message: "Internal server error" });
         }
 
-        const userDto = new UserDTO(user);
-
-        req.user = userDto;
-
+        req.user = new UserDTO(user);
         next();
     } catch (error) {
-        next(error);
+        return res.status(500).json({ message: "Internal server error" });
     }
-}
+};
+
 
 module.exports = auth;
